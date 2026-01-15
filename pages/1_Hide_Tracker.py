@@ -4,18 +4,15 @@ from utils import fetch_and_cache, format_item_id
 from datetime import datetime, timezone
 
 def get_item_icon(item_id):
-    # Standard Albion Render URL
     return f"https://render.albiononline.com/v1/item/{item_id}.png?size=32"
 
 def get_time_diff(date_str):
     if not date_str or date_str == "0001-01-01T00:00:00":
         return "N/A"
     try:
-        # Parse the API date (UTC)
         data_time = datetime.fromisoformat(date_str.replace("Z", "")).replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
         diff = now - data_time
-        
         minutes = int(diff.total_seconds() // 60)
         if minutes < 60:
             return f"{minutes}m ago"
@@ -36,12 +33,9 @@ data = st.session_state.get("data_cache", {}).get("hide")
 
 if data:
     df = pd.DataFrame(data)
-    
-    # Financial constants
-    FEE = 1.025 # 2.5% setup fee
-    HURDLE = 1.03 # 3% Transport/Risk premium
+    FEE = 1.025 
+    HURDLE = 1.03 
 
-    # Data Prep
     pv = df.pivot(index='item_id', columns='city', values=['sell_price_min', 'buy_price_max', 'sell_price_min_date'])
     pv.columns = [f"{'BW' if c[1]=='Bridgewatch' else 'ML'}_{'Insta' if c[0]=='sell_price_min' else ('Order' if c[0]=='buy_price_max' else 'Date')}" for c in pv.columns]
     pv = pv.reset_index()
@@ -55,24 +49,35 @@ if data:
         buy_limit = int(row[f'{city_prefix}_Order'] * FEE)
         time_ago = get_time_diff(row[f'{city_prefix}_Date'])
         
-        # Action Logic: Orange for Order, Green for Instant
+        # Action Logic remains untouched
         if buy_limit < insta_p and row[f'{city_prefix}_Order'] > 0:
-            action = '<span style="color: #FFA500; font-weight: bold;">[BUY ORDER]</span>'
+            action_tag = '[BUY ORDER]'
+            action_color = "#FFA500" # Orange
             limit_label = "Max Buy Limit"
         else:
-            action = '<span style="color: #00FF00; font-weight: bold;">[BUY INSTANT]</span>'
+            action_tag = '[BUY INSTANT]'
+            action_color = "#00FF00" # Keeping Green for Buy Instant per your logic
             limit_label = "Limit"
 
-        # Using an HTML table for fixed-width vertical alignment
+        # City Header Color logic
+        city_label_color = "#FFA500" if city_prefix == "BW" else "#ADD8E6"
+        city_name = "BRIDGEWATCH" if city_prefix == "BW" else "MARTLOCK"
+
+        # Tightened HTML structure (700px width, reduced padding)
         st.markdown(f"""
-            <table style="width:100%; border:none; border-collapse:collapse; background-color:transparent;">
+            <table style="width:750px; border:none; border-collapse:collapse; background-color:transparent; line-height:1; margin-bottom:2px;">
                 <tr style="border:none;">
-                    <td style="width:40px; border:none;"><img src="{icon}" width="28"></td>
-                    <td style="width:100px; border:none; font-weight:bold;">{name}</td>
-                    <td style="width:130px; border:none;">{action}</td>
-                    <td style="width:100px; border:none; color:#bbb;">Price: <b>{insta_p}</b></td>
-                    <td style="width:160px; border:none; color:#bbb;">{limit_label}: <b>{buy_limit}</b></td>
-                    <td style="width:80px; border:none; color:#888; font-style:italic; font-size:0.9em;">({time_ago})</td>
+                    <td style="width:35px; border:none; padding:2px;"><img src="{icon}" width="28"></td>
+                    <td style="width:110px; border:none; padding:2px; font-weight:bold; font-size:0.9em;">{name}</td>
+                    <td style="width:140px; border:none; padding:2px;">
+                        <span style="color: {city_label_color}; font-weight: bold; font-size:0.85em;">{city_name}</span>
+                    </td>
+                    <td style="width:130px; border:none; padding:2px;">
+                        <span style="color: {action_color}; font-weight: bold; font-size:0.85em;">{action_tag}</span>
+                    </td>
+                    <td style="width:100px; border:none; padding:2px; color:#bbb; font-size:0.85em;">Price: <b>{insta_p}</b></td>
+                    <td style="width:150px; border:none; padding:2px; color:#bbb; font-size:0.85em;">{limit_label}: <b>{buy_limit}</b></td>
+                    <td style="width:80px; border:none; padding:2px; color:#888; font-style:italic; font-size:0.75em;">({time_ago})</td>
                 </tr>
             </table>
         """, unsafe_allow_html=True)
@@ -93,14 +98,13 @@ if data:
             if not (best_bw * HURDLE < best_ml):
                 render_aligned_rows(row, 'ML')
 
-    # --- SIMPLIFIED RAW DATA SECTION ---
+    # --- COMPACT RAW DATA SECTION ---
     st.write("---")
-    st.subheader("📊 Raw Market Data (Instant Buy Prices Only)")
+    st.subheader("📊 Raw Market Data")
     
     raw_table = pv.copy()
     raw_table['Item'] = raw_table['item_id'].apply(lambda x: format_item_id(x, "Hide"))
     
-    # Display narrowed table: Removed "Silver" unit and set fixed small widths
     st.dataframe(
         raw_table[['Item', 'BW_Insta', 'ML_Insta']], 
         column_config={
@@ -108,6 +112,6 @@ if data:
             "BW_Insta": st.column_config.NumberColumn("BW Insta", format="%d", width="small"),
             "ML_Insta": st.column_config.NumberColumn("ML Insta", format="%d", width="small")
         },
-        use_container_width=False, # Makes the table compact rather than stretching to screen
+        use_container_width=False, 
         hide_index=True
     )
