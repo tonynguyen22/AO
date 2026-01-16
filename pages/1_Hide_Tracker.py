@@ -22,14 +22,17 @@ def get_time_diff(date_str):
         return "Error"
 
 st.set_page_config(layout="wide")
-st.title("🏹 Hide Procurement & Transport Strategy")
+st.title("🏹 High-Tier Hide Procurement & Transport")
 
-HIDE_URL = "https://west.albion-online-data.com/api/v2/stats/prices/T4_HIDE,T4_HIDE_LEVEL1@1,T4_HIDE_LEVEL2@2,T5_HIDE,T5_HIDE_LEVEL1@1,T5_HIDE_LEVEL2@2,T6_HIDE,T6_HIDE_LEVEL1@1,T6_HIDE_LEVEL2@2?locations=Bridgewatch,Martlock&qualities=1"
+# Updated URL with your specific high-tier requirements
+# Removed: T4.0, T4.1, T4.2, T5.0, T5.1
+# Added: T4.3, T5.2, T5.3, T6.0, T6.1, T6.2, T7.0, T7.1, T8.0
+HIDE_URL = "https://west.albion-online-data.com/api/v2/stats/prices/T4_HIDE_LEVEL3@3,T5_HIDE_LEVEL2@2,T5_HIDE_LEVEL3@3,T6_HIDE,T6_HIDE_LEVEL1@1,T6_HIDE_LEVEL2@2,T7_HIDE,T7_HIDE_LEVEL1@1,T8_HIDE?locations=Bridgewatch,Martlock&qualities=1"
 
 if st.button('Refresh Market Data'):
-    fetch_and_cache(HIDE_URL, "hide")
+    fetch_and_cache(HIDE_URL, "hide_high")
 
-data = st.session_state.get("data_cache", {}).get("hide")
+data = st.session_state.get("data_cache", {}).get("hide_high")
 
 if data:
     df = pd.DataFrame(data)
@@ -40,8 +43,6 @@ if data:
     pv.columns = [f"{'BW' if c[1]=='Bridgewatch' else 'ML'}_{'Insta' if c[0]=='sell_price_min' else ('Order' if c[0]=='buy_price_max' else 'Date')}" for c in pv.columns]
     pv = pv.reset_index()
     
-    col_bw, col_ml = st.columns(2)
-
     def render_aligned_rows(row, city_prefix):
         name = format_item_id(row['item_id'], "Hide")
         icon = get_item_icon(row['item_id'])
@@ -49,21 +50,18 @@ if data:
         buy_limit = int(row[f'{city_prefix}_Order'] * FEE)
         time_ago = get_time_diff(row[f'{city_prefix}_Date'])
         
-        # Action Logic remains untouched
         if buy_limit < insta_p and row[f'{city_prefix}_Order'] > 0:
             action_tag = '[BUY ORDER]'
             action_color = "#FFA500" # Orange
             limit_label = "Max Buy Limit"
         else:
             action_tag = '[BUY INSTANT]'
-            action_color = "#00FF00" # Keeping Green for Buy Instant per your logic
+            action_color = "#00FF00" # Green
             limit_label = "Limit"
 
-        # City Header Color logic
         city_label_color = "#FFA500" if city_prefix == "BW" else "#ADD8E6"
         city_name = "BRIDGEWATCH" if city_prefix == "BW" else "MARTLOCK"
 
-        # Tightened HTML structure (700px width, reduced padding)
         st.markdown(f"""
             <table style="width:750px; border:none; border-collapse:collapse; background-color:transparent; line-height:1; margin-bottom:2px;">
                 <tr style="border:none;">
@@ -82,21 +80,28 @@ if data:
             </table>
         """, unsafe_allow_html=True)
 
-    with col_bw:
-        st.subheader("🏜️ Bridgewatch Supply")
-        for _, row in pv.iterrows():
-            best_bw = min(row['BW_Insta'], row['BW_Order'] * FEE)
-            best_ml = min(row['ML_Insta'], row['ML_Order'] * FEE)
-            if best_bw * HURDLE < best_ml:
-                render_aligned_rows(row, 'BW')
+    # --- SECTIONS STACKED VERTICALLY ---
+    
+    st.subheader("🏜️ Bridgewatch Supply (Transport Target)")
+    for _, row in pv.iterrows():
+        # Compare INSTANT to INSTANT for the city decision
+        bw_insta = row['BW_Insta']
+        ml_insta = row['ML_Insta']
+        
+        # Decision: Is BW Instant (with hurdle) cheaper than ML Instant?
+        if (bw_insta * HURDLE < ml_insta) and bw_insta > 0:
+            render_aligned_rows(row, 'BW')
 
-    with col_ml:
-        st.subheader("⚓ Martlock Local")
-        for _, row in pv.iterrows():
-            best_bw = min(row['BW_Insta'], row['BW_Order'] * FEE)
-            best_ml = min(row['ML_Insta'], row['ML_Order'] * FEE)
-            if not (best_bw * HURDLE < best_ml):
-                render_aligned_rows(row, 'ML')
+    st.write("") 
+
+    st.subheader("⚓ Martlock Local (Stay Local)")
+    for _, row in pv.iterrows():
+        bw_insta = row['BW_Insta']
+        ml_insta = row['ML_Insta']
+        
+        # Decision: If transport doesn't beat the hurdle, buy in Martlock
+        if not (bw_insta * HURDLE < ml_insta):
+            render_aligned_rows(row, 'ML')
 
     # --- COMPACT RAW DATA SECTION ---
     st.write("---")
@@ -115,3 +120,6 @@ if data:
         use_container_width=False, 
         hide_index=True
     )
+
+else:
+    st.info("Click Refresh to load market data for T4.3 - T8.0.")

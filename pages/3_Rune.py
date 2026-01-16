@@ -3,6 +3,16 @@ import pandas as pd
 from utils import fetch_and_cache, format_item_id
 from datetime import datetime, timezone
 
+# CUSTOM CSS TO REMOVE STREAMLIT PADDING AND TIGHTEN UI
+st.markdown("""
+    <style>
+        .block-container {padding-top: 1rem; padding-bottom: 0rem;}
+        div.stButton > button {margin-bottom: -1rem;}
+        #root > div:nth-child(1) > div > div > div > div > section > div {padding-top: 1rem;}
+        hr {margin: 0.5rem 0px;} /* Tighten the horizontal divider */
+    </style>
+    """, unsafe_allow_html=True)
+
 def get_item_icon(item_id):
     return f"https://render.albiononline.com/v1/item/{item_id}.png?size=32"
 
@@ -22,11 +32,9 @@ def get_time_diff(date_str):
 st.set_page_config(layout="wide")
 st.title("💎 Artifact Procurement: BW vs Caerleon")
 
-# Define item groups for strict ordering
 TIERS = ["T5", "T6", "T7"]
 TYPES = ["RUNE", "SOUL", "RELIC"]
 
-# Flatten list for the API call
 ITEMS_LIST = [f"{t}_{typ}" for t in TIERS for typ in TYPES]
 ITEMS_QUERY = ",".join(ITEMS_LIST)
 RUNE_URL = f"https://west.albion-online-data.com/api/v2/stats/prices/{ITEMS_QUERY}?locations=Bridgewatch,Caerleon&qualities=1"
@@ -38,15 +46,13 @@ data = st.session_state.get("data_cache", {}).get("artifacts")
 
 if data:
     df = pd.DataFrame(data)
-    HURDLE = 1.08  # 8% Risk/Transport Premium
+    HURDLE = 1.08 
 
-    # Pivot and Clean
     pv = df.pivot(index='item_id', columns='city', values=['sell_price_min', 'sell_price_min_date'])
     city_map = {'Bridgewatch': 'BW', 'Caerleon': 'CL'}
     pv.columns = [f"{city_map.get(c[1], c[1])}_{'Price' if c[0]=='sell_price_min' else 'Date'}" for c in pv.columns]
     pv = pv.reset_index()
 
-    # Safety: Ensure columns exist
     for c in ['BW_Price', 'CL_Price']:
         if c not in pv.columns: pv[c] = 0
     for d in ['BW_Date', 'CL_Date']:
@@ -54,9 +60,11 @@ if data:
 
     st.subheader("📋 Unified Procurement Guide")
 
-    # Loop through Tiers then Types for strict ordering
+    # Loop through Tiers then Types for strict ordering with dividers
     for tier in TIERS:
-        st.markdown(f"### {tier} Artifacts")
+        # Mini-header for the tier group
+        st.markdown(f"**{tier} Group**")
+        
         for typ in TYPES:
             item_id = f"{tier}_{typ}"
             row = pv[pv['item_id'] == item_id]
@@ -65,50 +73,38 @@ if data:
                 row = row.iloc[0]
                 name = item_id.replace("T", "Tier ").replace("_", " ")
                 icon = get_item_icon(item_id)
+                bw_p, cl_p = row['BW_Price'], row['CL_Price']
                 
-                bw_p = row['BW_Price']
-                cl_p = row['CL_Price']
-                
-                # Logic: Buy BW if it's cheaper than CL even with 8% premium
+                # Logic: BW + Hurdle vs CL
                 if (bw_p * HURDLE < cl_p) and bw_p > 0:
-                    dest_city, dest_p, dest_color, dest_key = "BRIDGEWATCH", bw_p, "#FFA500", "BW"
-                    action_text = "BUY AT BW (TRANSPORT)"
+                    dest_p, dest_color, dest_key, action_text = bw_p, "#FFA500", "BW", "BUY AT BW (TRANSPORT)"
                 else:
-                    dest_city, dest_p, dest_color, dest_key = "CAERLEON", cl_p, "#FF4B4B", "CL"
-                    action_text = "BUY LOCAL (CAERLEON)"
+                    dest_p, dest_color, dest_key, action_text = cl_p, "#FF4B4B", "CL", "BUY LOCAL (CAERLEON)"
 
                 time_ago = get_time_diff(row[f'{dest_key}_Date'])
 
                 st.markdown(f"""
-                    <table style="width:750px; border:none; border-collapse:collapse; background-color:transparent; line-height:1; margin-bottom:2px;">
-                        <tr style="border:none;">
-                            <td style="width:35px; border:none; padding:2px;"><img src="{icon}" width="28"></td>
-                            <td style="width:150px; border:none; padding:2px; font-weight:bold; font-size:0.95em;">{name}</td>
-                            <td style="width:220px; border:none; padding:2px;">
-                                <span style="color: {dest_color}; font-weight: bold; font-size:0.9em;">[{action_text}]</span>
-                            </td>
-                            <td style="width:120px; border:none; padding:2px; color:#bbb; font-size:0.9em;">Price: <b>{int(dest_p):,}</b></td>
-                            <td style="width:80px; border:none; padding:2px; color:#888; font-style:italic; font-size:0.8em;">({time_ago} ago)</td>
-                        </tr>
-                    </table>
+                    <div style="display: flex; align-items: center; width: 700px; line-height: 1.1; margin-bottom: 1px; border-bottom: 1px solid #333;">
+                        <div style="width: 35px;"><img src="{icon}" width="24"></div>
+                        <div style="width: 120px; font-weight: bold; font-size: 0.85em;">{name}</div>
+                        <div style="width: 200px; color: {dest_color}; font-weight: bold; font-size: 0.8em;">[{action_text}]</div>
+                        <div style="width: 100px; color: #bbb; font-size: 0.85em;">Price: <b>{int(dest_p):,}</b></div>
+                        <div style="width: 80px; color: #666; font-style: italic; font-size: 0.75em;">({time_ago} ago)</div>
+                    </div>
                 """, unsafe_allow_html=True)
         
-        # Add a visual divider between Tier groups
+        # Keep the divider between tier groups
         st.markdown("---")
-
-    # --- RAW DATA TABLE ---
-    st.subheader("📊 Raw Market Data (Instant Buy Only)")
+        
+    st.subheader("📊 Raw Market Data")
     
-    # Re-order the dataframe to match the requested Rune -> Soul -> Relic flow
+    # Sorting raw table to match the UI order
     raw_table = pv.copy()
     raw_table['temp_tier'] = raw_table['item_id'].apply(lambda x: x.split('_')[0])
     raw_table['temp_type'] = raw_table['item_id'].apply(lambda x: x.split('_')[1])
-    
-    # Custom sorting logic
     type_order = {"RUNE": 0, "SOUL": 1, "RELIC": 2}
     raw_table['type_sort'] = raw_table['temp_type'].map(type_order)
     raw_table = raw_table.sort_values(['temp_tier', 'type_sort'])
-    
     raw_table['Item Name'] = raw_table['item_id'].apply(lambda x: x.replace("T", "Tier ").replace("_", " "))
     
     st.dataframe(
@@ -121,6 +117,5 @@ if data:
         use_container_width=False,
         hide_index=True
     )
-
 else:
-    st.info("Click Refresh to pull market data.")
+    st.info("Click Refresh to load artifact prices.")
